@@ -37,8 +37,7 @@ const render = () => {
         .select('#theSVG')
         .attr('viewBox', [0, 0, props.width, props.height])
         .attr('width', props.width)
-        .attr('height', props.height)
-        .on('click', reset);
+        .attr('height', props.height);
 
     const mapGraph = svg.append('g');
 
@@ -219,6 +218,7 @@ const render = () => {
                     });
             });
 
+            svg.on('click', reset);
             svg.call(zoom);
         });
 };
