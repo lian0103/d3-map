@@ -5,6 +5,7 @@ import * as topojson from 'topojson-client';
 
 const countrySvg = ref();
 const currentSelect = ref();
+var allTowns = null;
 
 const props = defineProps({
     width: {
@@ -18,10 +19,11 @@ const props = defineProps({
 });
 
 const isPhoneSize = computed(() => {
-    return width.value < 420;
+    return props.width.value < 420;
 });
 
 var reset = null;
+var svg = null;
 
 const emit = defineEmits(['change']);
 
@@ -31,9 +33,44 @@ watch(
         emit('change', val);
     }
 );
+var countryMapGraph = null;
+const renderCountry = (code) => {
+    if (!code) return false;
+    // console.log(code);
+
+    let targetCountry = JSON.parse(JSON.stringify(allTowns));
+    targetCountry.objects.TOWN_MOI_1111118.geometries = targetCountry.objects.TOWN_MOI_1111118.geometries.filter(
+        (item) => item.properties.COUNTYCODE === code
+    );
+
+    countryMapGraph = svg.append('g').attr('id', `countrySVG`);
+
+    const projection = d3
+        .geoEquirectangular()
+        .scale(11000)
+        .center(isPhoneSize ? [121, 24] : [122, 24.5])
+        .translate([props.width / 2, props.height / 2]);
+
+    const path = d3.geoPath().projection(projection);
+
+    countryMapGraph
+        .append('path')
+        .attr('fill', 'none')
+        .attr('stroke', 'white')
+        .attr('stroke-linejoin', 'round')
+        .attr('d', path(topojson.mesh(targetCountry, targetCountry.objects.TOWN_MOI_1111118, (a, b) => a !== b)));
+    countryMapGraph
+        .append('g')
+        .attr('fill', '#72cbcc6f')
+        .attr('cursor', 'pointer')
+        .selectAll('path')
+        .data(topojson.feature(targetCountry, targetCountry.objects.TOWN_MOI_1111118).features)
+        .join('path')
+        .attr('d', path);
+};
 
 const render = () => {
-    const svg = d3
+    svg = d3
         .select('#theSVG')
         .attr('viewBox', [0, 0, props.width, props.height])
         .attr('width', props.width)
@@ -50,26 +87,32 @@ const render = () => {
     const path = d3.geoPath().projection(projection);
 
     function clicked(event, d) {
+        d3.select('#countrySVG').remove();
         currentSelect.value = d;
+
+        renderCountry(d.properties.COUNTYCODE);
 
         const target = this || `#path-${d.properties.COUNTYCODE}`;
         const [[x0, y0], [x1, y1]] = path.bounds(d);
         event.stopPropagation();
         countrySvg.value.transition().style('fill', null);
-        d3.select(target).transition().style('fill', '#72cbcc');
-        svg.transition()
-            .duration(750)
-            .call(
-                zoom.transform,
-                d3.zoomIdentity
-                    .translate(props.width / 2, props.height / 2)
-                    .scale(Math.min(8, 0.9 / Math.max((x1 - x0) / props.width, (y1 - y0) / props.height)))
-                    .translate(-(x0 + x1) / 2, -(y0 + y1) / 2),
-                d3.pointer(event, svg.node())
-            );
+        nextTick(() => {
+            d3.select(target).transition().style('fill', '#72cbcc');
+            svg.transition()
+                .duration(750)
+                .call(
+                    zoom.transform,
+                    d3.zoomIdentity
+                        .translate(props.width / 2, props.height / 2)
+                        .scale(Math.min(8, 0.9 / Math.max((x1 - x0) / props.width, (y1 - y0) / props.height)))
+                        .translate(-(x0 + x1) / 2, -(y0 + y1) / 2),
+                    d3.pointer(event, svg.node())
+                );
+        });
     }
 
     reset = () => {
+        d3.select('#countrySVG').remove();
         countrySvg.value.transition().style('fill', null);
         currentSelect.value = null;
         svg.transition()
@@ -85,6 +128,10 @@ const render = () => {
         const { transform } = event;
         mapGraph.attr('transform', transform);
         mapGraph.attr('stroke-width', 1 / transform.k);
+        if (countryMapGraph) {
+            countryMapGraph.attr('transform', transform);
+            countryMapGraph.attr('stroke-width', 1 / transform.k);
+        }
     }
 
     const zoom = d3.zoom().scaleExtent([1, 8]).on('zoom', zoomed);
@@ -239,6 +286,12 @@ defineExpose({
 
 onMounted(() => {
     render();
+
+    fetch('./TOWN_MOI_topo.json')
+        .then((res) => res.json())
+        .then((data) => {
+            allTowns = data;
+        });
 });
 </script>
 
@@ -252,6 +305,7 @@ onMounted(() => {
 $main: #72cbcc;
 $bg: #ccc;
 .taiwan-wrapper {
+    // color:#72cbcc6f;
     #theSVG {
         @apply mx-auto;
         background: $bg;
@@ -265,6 +319,7 @@ $bg: #ccc;
         font-size: 12px;
         fill: #fff;
         @apply select-none;
+        z-index: 2;
     }
 }
 </style>
